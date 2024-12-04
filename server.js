@@ -1,32 +1,22 @@
 const express = require('express');
 const bodyParser = require('body-parser');
-const sqlite3 = require('sqlite3').verbose();
-const cors = require('cors'); // Importa cors
+const Database = require('better-sqlite3'); // Importa better-sqlite3
 
 const app = express();
 const PORT = 3000;
 
-// Permite todas las solicitudes de cualquier origen
-app.use(cors());
-
 // Crear o abrir la base de datos SQLite
-const db = new sqlite3.Database('./database.db', (err) => {
-    if (err) {
-        console.error('Error al conectar a SQLite:', err);
-    } else {
-        console.log('Conectado a la base de datos SQLite.');
-    }
-});
+const db = new Database('./database.db', { verbose: console.log });
 
 // Crear la tabla mensajes si no existe
-db.run(`
+db.prepare(`
     CREATE TABLE IF NOT EXISTS mensajes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nombre TEXT,
         correo TEXT,
         mensaje TEXT
     )
-`);
+`).run();
 
 // Middleware
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -36,29 +26,25 @@ app.use(bodyParser.json());
 app.post('/contact', (req, res) => {
     const { name, email, message } = req.body;
 
-    // Insertar datos en la tabla
-    const sql = 'INSERT INTO mensajes (nombre, correo, mensaje) VALUES (?, ?, ?)';
-    db.run(sql, [name, email, message], function (err) {
-        if (err) {
-            console.error('Error al insertar datos en SQLite:', err);
-            res.status(500).send('Error al guardar el mensaje.');
-        } else {
-            res.send('¡Mensaje guardado con éxito!');
-        }
-    });
+    try {
+        // Insertar datos en la tabla
+        db.prepare('INSERT INTO mensajes (nombre, correo, mensaje) VALUES (?, ?, ?)').run(name, email, message);
+        res.send('¡Mensaje guardado con éxito!');
+    } catch (err) {
+        console.error('Error al insertar datos:', err);
+        res.status(500).send('Error al guardar el mensaje.');
+    }
 });
 
 // Ruta para listar mensajes (opcional, para verificar)
 app.get('/messages', (req, res) => {
-    const sql = 'SELECT * FROM mensajes';
-    db.all(sql, [], (err, rows) => {
-        if (err) {
-            console.error('Error al obtener datos de SQLite:', err);
-            res.status(500).send('Error al obtener los mensajes.');
-        } else {
-            res.json(rows);
-        }
-    });
+    try {
+        const messages = db.prepare('SELECT * FROM mensajes').all();
+        res.json(messages);
+    } catch (err) {
+        console.error('Error al obtener datos:', err);
+        res.status(500).send('Error al obtener los mensajes.');
+    }
 });
 
 // Iniciar el servidor
