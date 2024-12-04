@@ -1,64 +1,67 @@
-const mysql = require('mysql');
 const express = require('express');
 const bodyParser = require('body-parser');
-const cors = require('cors'); // Importa CORS
+const sqlite3 = require('sqlite3').verbose();
+const cors = require('cors'); // Importa cors
 
 const app = express();
+const PORT = 3000;
 
-// Configuración de CORS
+// Permite todas las solicitudes de cualquier origen
 app.use(cors());
 
-// Configuración de la base de datos
-const db = mysql.createConnection({
-    host: 'localhost',
-    user: 'root',
-    password: 'Cerdo3312',
-    database: 'contacto_portafolio',
-});
-
-
-// Conexión a la base de datos
-db.connect((err) => {
+// Crear o abrir la base de datos SQLite
+const db = new sqlite3.Database('./database.db', (err) => {
     if (err) {
-        console.error('Error al conectar a MySQL:', err);
-        return;
+        console.error('Error al conectar a SQLite:', err);
+    } else {
+        console.log('Conectado a la base de datos SQLite.');
     }
-    console.log('Conectado a la base de datos MySQL.');
 });
+
+// Crear la tabla mensajes si no existe
+db.run(`
+    CREATE TABLE IF NOT EXISTS mensajes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre TEXT,
+        correo TEXT,
+        mensaje TEXT
+    )
+`);
 
 // Middleware
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
-// Ruta GET para el punto raíz
-app.get('/', (req, res) => {
-    res.send('¡Bienvenido al servidor de contacto!');
-});
-
 // Ruta para manejar el formulario
 app.post('/contact', (req, res) => {
     const { name, email, message } = req.body;
 
-    // Validación básica
-    if (!name || !email || !message) {
-        res.status(400).send('Todos los campos son obligatorios.');
-        return;
-    }
-
-    // Query para insertar datos
+    // Insertar datos en la tabla
     const sql = 'INSERT INTO mensajes (nombre, correo, mensaje) VALUES (?, ?, ?)';
-    db.query(sql, [name, email, message], (err, result) => {
+    db.run(sql, [name, email, message], function (err) {
         if (err) {
-            console.error('Error al insertar datos:', err);
+            console.error('Error al insertar datos en SQLite:', err);
             res.status(500).send('Error al guardar el mensaje.');
-            return;
+        } else {
+            res.send('¡Mensaje guardado con éxito!');
         }
-        res.status(200).send('¡Mensaje guardado con éxito!');
+    });
+});
+
+// Ruta para listar mensajes (opcional, para verificar)
+app.get('/messages', (req, res) => {
+    const sql = 'SELECT * FROM mensajes';
+    db.all(sql, [], (err, rows) => {
+        if (err) {
+            console.error('Error al obtener datos de SQLite:', err);
+            res.status(500).send('Error al obtener los mensajes.');
+        } else {
+            res.json(rows);
+        }
     });
 });
 
 // Iniciar el servidor
-const PORT = 3000;
 app.listen(PORT, () => {
     console.log(`Servidor corriendo en http://localhost:${PORT}`);
 });
